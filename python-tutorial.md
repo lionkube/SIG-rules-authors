@@ -6,11 +6,11 @@ nav_order: 4
 
 ## This tutorial covers
 
-- Background of Bazel and Bazel's Go support
+- Background of Bazel and Bazel's Python support
 - Covering the use of rules_python with Bazel and Python
 - Creating a basic Python project for the tutorial
-- Implementing a `WORKSPACE` and `BUILD.bazel` files 
-- Using Gazelle to generate more `WORKSPACE` and `BUILD.bazel` updates
+- Implementing a `MODULES.bazel` and `BUILD.bazel` files 
+- Using Gazelle to generate more and `BUILD.bazel` updates
 - Utilizing different Bazel commands
 - An overview of Gazelle and Python dependency management
 - Understanding the contents of the `WORKSPACE` and `BUILD.bazel` files
@@ -88,8 +88,8 @@ start a new project with Bazel.
 
 We are going to create a small example project first using Python.  
 
-The project is going to consist of a Python script that retrieves a web site page and
-pretty prints the page.
+The project is going to consist of a Python program that starts a Flask
+servers which serves a random number.
 
 ## Generate the project framework
 
@@ -98,21 +98,32 @@ First, create a git repository to store your work.  For this project, we are usi
 to that repository with your own. You can refer to the above repository for 
 the final source code base.
 
+
 Run the following comment to create the Python project and files:
 
 ```bash
-$ mkdir get_url
-$ touch __main__.py __init__.py get_url/get_url.py get_url/__init__.py requirements.txt requirements_lock.txt
+$ mkdir  random_number_generator
+$ touch BUILD.bazel MODULE.bazel WORKSPACE __init__.py __main__.py \
+gazelle_python.yaml random_number_generator/__init__.py \
+random_number_generator/generate_random_number.py \
+requirements.in requirements_lock.txt requirements_windows.txt
 ```
 
 In your favorite editor edit the `__init__.py` file and add:
 
 ```python
-from get_url import get_url
+from flask import Flask, jsonify
+from random_number_generator import generate_random_number
 
-"""Simple program that prints out a url that is passed in."""
-def main(url):
-    print(get_url.get(url))
+app = Flask(__name__)
+
+@app.route('/random-number', methods=['GET'])
+def get_random_number():
+    return jsonify({'number': generate_random_number.generate_random_number()})
+
+"""Start the python web server"""
+def main():
+    app.run()
 ```
 
 Edit the `__main__.py` file and add:
@@ -121,31 +132,26 @@ Edit the `__main__.py` file and add:
 
 from __init__ import main
 
-"""Print out the bazel-contrib website"""
-if __name__ == "__main__":
-    main("https://bazel-contrib.github.io/SIG-rules-authors/")
+if __name__ == '__main__':
+    main()
 ```
 
-In the `requirements.txt` file add the following lines:
+In the `requirements.in` file add the following lines:
 
 ```
-requests==2.25.1
-psutil==5.9.4
-beautifulsoup4
+flask
+importlib-metadata
 ```
 
-Next add the following Python code to the `get_url/get_url.py` file:
+Next add the following Python code to the `random_number_generator/generate_random_number.py`
+file.
 
 ```
-import requests
-from bs4 import BeautifulSoup
+import random
 
-"""The get function downloads a web page and the returns a pretty print version
-of the web page using BeautfilSoup"""
-def get(url):
-    r = requests.get(url)
-    soup = BeautifulSoup(r.content, 'html.parser')
-    return soup.prettify()
+"""Generate a random number"""
+def generate_random_number():
+    return random.randint(1, 10)
 ```
 
 We should now have a file layout like the following:
@@ -153,14 +159,20 @@ We should now have a file layout like the following:
 ```bash
 $ tree
 .
+├── BUILD.bazel
+├── MODULE.bazel
+├── WORKSPACE
 ├── __init__.py
 ├── __main__.py
-├── get_url
+├── gazelle_python.yaml
+├── random_number_generator
 │   ├── __init__.py
-│   └── get_url.py
-└── requirements.txt
+│   └── generate_random_number.py
+├── requirements.in
+├── requirements_lock.txt
+└── requirements_windows.txt
 
-1 directory, 5 files
+1 directory, 11 files
 ```
 
 Next add a .gitignore file by running the following command.
@@ -178,12 +190,14 @@ Bazel creates various directories in the project root and this file will allow g
 to ignore those directories.
 
 This is a good time to push your files into a remote git repository like GitHub. Now
-we cover rules_push and Gazelle.
+we cover `rules_python` and Gazelle.
 
 If we where not using Bazel we would next setup the Python envinronment using a tool like `virtualenv` and
 install the dependies using `pip` or `easy_install`.  But when using Bazel all of that tooling and
 project configuration is handled for us. In order to understand more about about how Bazel manages dependencies
 and provides Python version configuration lets cover Bazel Rules.
+
+<!-- TODO bazelrc file -->
 
 ## Bazel Rules
 
@@ -195,144 +209,89 @@ about them here:
 
 At a high level, we use Starlark to define that Bazel will use rules from rules_python
 to create the Go support within a project. We use Gazelle to manage our `BUILD.bazel` files,
-or `WORKSPACE` files, and other Bazel-specific files.
+and `MODULES.bazel` file, and other Bazel-specific files.
 
-If you are not familiar with `BUILD.bazel` files or `WORKSPACE` files look at:
+If you are not familiar with `BUILD.bazel` files or `MODULES.bazel` files look at:
 https://bazel.build/concepts/build-files.
 
-Next, let's create our `WORKSPACE` file so that Bazel knows it is using rules_python and Gazelle.
+We are providing instuctions on how to setup a Pyton project using bzlmod. Older projects
+may use a WORKSPACE file for dependency management.
 
-## Create a `WORKSPACE` file
+Next, let's create our `MODULES.bazel` file so that Bazel knows it is using rules_python and Gazelle.
 
-Bazel files, including the `WORKSPACE` and other `BUILD.bazel` files, include [Starlark](https://bazel.build/rules/language) definitions.
+## Create a `MODULES.bazel` file
 
-An example `WORKSPACE` file is documented [here](https://github.com/bazelbuild/bazel-gazelle#running-gazelle-with-bazel).
+Bazel files, including the `MODULES.bazel` and other `BUILD.bazel` files, include [Starlark](https://bazel.build/rules/language) definitions.
 
-Use your favorite editor and create a file named `WORKSPACE` in the root directory of your project. 
-
-Edit the `WORKSPACE` file and include the following Starlark code.
-
+Use your favorite editor and edit `MODULES.bazel` in the root directory of your project. 
 
 ```python
-# Load the http_archive rule so that we can have bazel download
-# various rulesets and dependencies.
-# The `load` statement imports the symbol for http_archive from the http.bzl
-# file.  When the symbol is loaded you can use the rule.
-load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
-
-######################################################################
-# We need rules_go and bazel_gazelle, to build the gazelle plugin from source.
-# Setup instructions for this section are at
-# https://github.com/bazelbuild/bazel-gazelle#running-gazelle-with-bazel
-# You may need to update the version of the rule, which is listed in the above
-# documentation.
-######################################################################
-
-# Define an http_archive rule that will download the below ruleset,
-# test the sha, and extract the ruleset to you local bazel cache.
-http_archive(
-    name = "io_bazel_rules_go",
-    sha256 = "099a9fb96a376ccbbb7d291ed4ecbdfd42f6bc822ab77ae6f1b5cb9e914e94fa",
-    urls = [
-        "https://mirror.bazel.build/github.com/bazelbuild/rules_go/releases/download/v0.35.0/rules_go-v0.35.0.zip",
-        "https://github.com/bazelbuild/rules_go/releases/download/v0.35.0/rules_go-v0.35.0.zip",
-    ],
+# Declares certain properties of the Bazel module represented by the current Bazel repo.
+# These properties are either essential metadata of the module (such as the name and version),
+# or affect behavior of the current module and its dependents.
+module(
+    # update the name to match your project folder
+    name = "build_file_generation",
+    version = "0.0.0",
+    compatibility_level = 1,
 )
 
-# Download the bazel_gazelle ruleset.
-http_archive(
-    name = "bazel_gazelle",
-    sha256 = "efbbba6ac1a4fd342d5122cbdfdb82aeb2cf2862e35022c752eaddffada7c3f3",
-    urls = [
-        "https://mirror.bazel.build/github.com/bazelbuild/bazel-gazelle/releases/download/v0.27.0/bazel-gazelle-v0.27.0.tar.gz",
-        "https://github.com/bazelbuild/bazel-gazelle/releases/download/v0.27.0/bazel-gazelle-v0.27.0.tar.gz",
-    ],
-)
+# The following stanza defines the dependency rules_python and gazlle.
+# Update the version number with the latest release that are found here
+# https://github.com/bazelbuild/rules_python/releases
+bazel_dep(name = "rules_python", version = "0.0.0")
+bazel_dep(name = "rules_python_gazelle_plugin", version = "0.20.0")
 
-# Load rules_go ruleset and expose the toolchain and dep rules
-load("@bazel_gazelle//:deps.bzl", "gazelle_dependencies")
-load("@io_bazel_rules_go//go:deps.bzl", "go_register_toolchains", "go_rules_dependencies")
+# The following stanza defines the dependency rules_python.
+# Update the version based on the version found here: 
+# https://github.com/bazelbuild/bazel-gazelle/releases
+bazel_dep(name = "gazelle", version = "0.30.0", repo_name = "bazel_gazelle")
 
-# go_rules_dependencies is a function that registers external dependencies
-# needed by the Go rules.
-# https://github.com/bazelbuild/rules_go/blob/master/go/dependencies.rst#go_rules_dependencies
-go_rules_dependencies()
+# The following stanze Returns a proxy object representing a module extension;
+# its methods can be invoked to create module extension tags.
+python = use_extension("@rules_python//python:extensions.bzl", "python")
 
-# go_rules_dependencies is a function that registers external dependencies
-# needed by the Go rules.
-# https://github.com/bazelbuild/rules_go/blob/master/go/dependencies.rst#go_rules_dependencies
-go_register_toolchains(version = "1.18.3")
-
-# The following call configured the gazelle dependencies, Go environment and Go SDK.
-gazelle_dependencies()
-
-# Remaining setup is for rules_python
-
-# See https://github.com/bazelbuild/rules_python#getting-started for the latest
-# ruleset version.
-rules_python_version = "740825b7f74930c62f44af95c9a4c1bd428d2c53" # Latest @ 2021-06-23
-
-http_archive(
-    name = "rules_python",
-    sha256 = "3474c5815da4cb003ff22811a36a11894927eda1c2e64bf2dac63e914bfdf30f",
-    strip_prefix = "rules_python-{}".format(rules_python_version),
-    url = "https://github.com/bazelbuild/rules_python/archive/{}.zip".format(rules_python_version),
-)
-
-# Next we load the toolchain from rules_python.
-load("@rules_python//python:repositories.bzl", "python_register_toolchains")
-
-# We now register a hermetic Python interpreter rather than relying on a system-installed interpreter.
-# This toolchain will allow bazel to download a specific python version, and use that version
+# Using the module extension we register a hermetic Python interpreter rather than relying on
+# a system-installed interpreter.
+# This toolchain will allow bazel to download a specific  python version, and use that version
 # for compilation.
-python_register_toolchains(
-    name = "python39",
-    python_version = "3.9",
+python.toolchain(
+    name = "python3_10",
+    python_version = "3.10",
 )
 
-# load the interpreter and pip_parse rules.
-load("@python39//:defs.bzl", "interpreter")
-load("@rules_python//python:pip.bzl", "pip_parse")
+# Import the python toolchain generated by the given module extension into the scope of the current module.
+use_repo(python, "python3_10_toolchains")
 
-# This macro wraps the `pip_repository` rule that invokes `pip`, with `incremental` set.
+# Register an already-defined toolchain so that Bazel can use it during toolchain resolution.
+register_toolchains(
+    "@python3_10_toolchains//:all",
+)
+
+# Use the pip extension
+pip = use_extension("@rules_python//python:extensions.bzl", "pip")
+
+# Use the extension to call the `pip_repository` rule that invokes `pip`, with `incremental` set.
 # Accepts a locked/compiled requirements file and installs the dependencies listed within.
 # Those dependencies become available in a generated `requirements.bzl` file.
 # You can instead check this `requirements.bzl` file into your repo.
-pip_parse(
+# Because this project has different requirements for windows vs other
+# operating systems, we have requirements for each.
+pip.parse(
     name = "pip",
-    # (Optional) You can provide a python_interpreter (path) or a python_interpreter_target (a Bazel target, that
-    # acts as an executable). The latter can be anything that could be used as Python interpreter. E.g.:
-    # 1. Python interpreter that you compile in the build file (as above in @python_interpreter).
-    # 2. Pre-compiled python interpreter included with http_archive
-    # 3. Wrapper script, like in the autodetecting python toolchain.
-    #
-    # Here, we use the interpreter constant that resolves to the host interpreter from the default Python toolchain.
-    python_interpreter_target = interpreter,
-    # Set the location of the lock file.
+    # Generate user friendly alias labels for each dependency that we have.
+    incompatible_generate_aliases = True,
     requirements_lock = "//:requirements_lock.txt",
+    requirements_windows = "//:requirements_windows.txt",
 )
 
-# load the install_deps macro
-load("@pip//:requirements.bzl", "install_deps")
+# Imports the pip toolchain generated by the given module extension into the scope of the current module.
+use_repo(pip, "pip")
+```
 
-# Initialize repositories for all packages in requirements_lock.txt.
-install_deps()
-
-# The rules_python gazelle extension has some third-party go dependencies
-# which we need to fetch in order to compile it.
-load("@rules_python//gazelle:deps.bzl", _py_gazelle_deps = "gazelle_deps")
-
-# See: https://github.com/bazelbuild/rules_python/blob/main/gazelle/README.md
-# This rule loads and compiles various go dependencies that running gazelle
-# for python requires.
-_py_gazelle_deps()
-
-The above `WORKSPACE` file contains specific version numbers for rules_python and Gazelle.  Refer to the 
-python_rules site to use the latest versions.  Also, update the `python_register_toolchains(version = "3.9")`
+The above `MODULES.bazel` file contains specific version numbers for rules_python and Gazelle.  Refer to the 
+python_rules site to use the latest versions.  Also, update the `python_register_toolchains(version = "3.10")`
 to the version you would like to use of Python.
-
-You will notice that we are loading Go dependencies.  The Go dependencies are in order to support Gazelle which
-is written in Go.
 
 Next, we need a `BUILD.bazel` file in the root project directory.
 
@@ -348,23 +307,25 @@ file:
 # ruleset. When the symbol is loaded you can use the rule.
 load("@bazel_gazelle//:def.bzl", "gazelle")
 load("@pip//:requirements.bzl", "all_whl_requirements")
-load("@rules_python//gazelle:def.bzl", "GAZELLE_PYTHON_RUNTIME_DEPS")
-load("@rules_python//gazelle/manifest:defs.bzl", "gazelle_python_manifest")
-load("@rules_python//gazelle/modules_mapping:def.bzl", "modules_mapping")
-load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
 load("@rules_python//python:pip.bzl", "compile_pip_requirements")
+load("@rules_python_gazelle_plugin//:def.bzl", "GAZELLE_PYTHON_RUNTIME_DEPS")
+load("@rules_python_gazelle_plugin//manifest:defs.bzl", "gazelle_python_manifest")
+load("@rules_python_gazelle_plugin//modules_mapping:def.bzl", "modules_mapping")
 
+# This stanza calls a rule that generates targets for managing pip dependencies
+# with pip-compile.
 compile_pip_requirements(
     name = "requirements",
     extra_args = ["--allow-unsafe"],
-    requirements_in = "requirements.txt",
+    requirements_in = "requirements.in",
     requirements_txt = "requirements_lock.txt",
+    requirements_windows = "requirements_windows.txt",
 )
 
 # This repository rule fetches the metadata for python packages we
 # depend on. That data is required for the gazelle_python_manifest
 # rule to update our manifest file.
-# To see what this rule does, try `bazel run @modules_map//:print`
 modules_mapping(
     name = "modules_map",
     exclude_patterns = [
@@ -384,9 +345,11 @@ modules_mapping(
 gazelle_python_manifest(
     name = "gazelle_python_manifest",
     modules_mapping = ":modules_map",
-    pip_repository_incremental = True,
     pip_repository_name = "pip",
     requirements = "//:requirements_lock.txt",
+    # NOTE: we can use this flag in order to make our setup compatible with
+    # bzlmod.
+    use_pip_repository_aliases = True,
 )
 
 # Our gazelle target points to the python gazelle binary.
@@ -397,7 +360,7 @@ gazelle_python_manifest(
 gazelle(
     name = "gazelle",
     data = GAZELLE_PYTHON_RUNTIME_DEPS,
-    gazelle = "@rules_python//gazelle:gazelle_python_binary",
+    gazelle = "@rules_python_gazelle_plugin//python:gazelle_binary",
 )
 ```
 
@@ -407,14 +370,13 @@ Next, we will use Bazel to run the Gazelle target.
 
 ## Run the Gazelle commands
 
-```
-touch gazelle_python.yaml
-```
+Now run the following command to update the python pip requirements and 
+use gazelle to modify the `BUILD.bazel` files.
 
-```
-bazelisk run //:requirements.update
-bazelisk run //:gazelle_python_manifest.update
-bazelisk run //:gazelle update
+```bash
+$ bazelisk run //:requirements.update
+$ bazelisk run //:gazelle_python_manifest.update
+$ bazelisk run //:gazelle update
 ```
 
 We previously mentioned we use Bazel to run Gazelle, and 
@@ -422,58 +384,15 @@ Gazelle manages the `BUILD.bazel` files for us.  We are using bazelisk to
 manage and run Bazel, but we will typically say "run bazel" 
 instead of "run bazelisk".  
 
-Run the following commands to update the root `BUILD.bazel`, 
-the `WORKSPACE` file, and generate the other `BUILD.bazel`
-files for the project.
+Let's break down what each of the above commands did.
 
-```bash
-$ bazelisk run //:gazelle
-$ bazelisk run //:gazelle-update-repos
-```
+First running `bazelisk run //:requirements.update` uses pip to update the requirments.in file, and configures pip.
+Next running `bazelisk run //:gazelle_python_manifest.update` updates the `gazelle_python.yaml`
+to include information for gazelle about the pip dependencies.
 
-You now have the following files:
-
-```
-├── BUILD.bazel
-├── CREATE.adoc
-├── LICENSE
-├── WORKSPACE
-├── cmd
-│   ├── BUILD.bazel
-│   ├── roll.go
-│   └── root.go
-├── deps.bzl
-├── go.mod
-├── go.sum
-├── main.go
-└── pkg
-    └── roll
-        ├── BUILD.bazel
-        └── roll_dice.go
-```
-
-We now have new `BUILD.bazel` files in the cmd and pkg directories.
-How about we walk through the Starlark code in the `BUILD.bazel` and `deps.bzl`
-files?
-
-## The bazel files in the project
-
-The previous Gazelle command updated the `BUILD.bazel` file in the project's root directory
-and created new `BUILD.bazel` files as well. Here is a layout of the Bazel files in the project.
-
-```
-├── BUILD.bazel
-├── WORKSPACE
-├── cmd
-│   ├── BUILD.bazel
-├── deps.bzl
-└── pkg
-    └── roll
-        └── BUILD.bazel
-```
-
-The `WORKSPACE` file was updated as well, and we have a new file called `deps.bzl`. 
-We now have a working Bazel project, so what commands can we run?
+Lastly running `bazelisk run //:gazelle update` causes gazelle to run and update the BUILD.bazel file in the root directory
+and create a BUILD.bazel file in the random_number_generator folder.  We will cover more
+about the BUILD.bazel files in later sections.
 
 ### Basic Bazel commands
 
@@ -493,27 +412,24 @@ In the project, you can run
 $ bazelisk build //...
 ```
 
-This will build the binary for our example project. We can run the binary that Bazel
-creates with the following command:
+This will build the Python code for our example project. 
+
+
+We can run the binary that Bazel creates with the following command:
 
 ```bash
-$ bazelisk run //:basic-gazelle
-```
-You can also pass in the command line option "roll" that we defined to the Bazel run command.
-
-```bash
-$ bazelisk run //:basic-gazelle roll
+$ bazelisk run $(bazelsk query "filter('_bin$', //...:)")
 ```
 
-We will cover the "test" command later as we do not have any tests defined
-in the project.
+We are using the query argument to find the target that ends with `_bin`.  Gazelle added that target
+to your build file.
 
 So the commands build, run, and test are pretty easy to get your head around, but the third part of the
 command was a bit confusing for me when I first learned Bazel.  The "//..." or "//:something"  
 is called a target.
 
 You can refer to the documentation [here](https://bazel.build/run/build#bazel-build).  The text "//..."
-and "//:basic-gazelle" are all the targets in a given directory or the name of a 
+and "//:test_python_example_bin" are all the targets in a given directory or the name of a 
 specific target.  Some commands like build, and test can run multiple targets, 
 while a command like run can only execute one target.
 
@@ -562,43 +478,23 @@ The below table provides a great guide for targets:
 
 > <cite>https://bazel.build/run/build#specifying-build-targets</cite>
 
-If we look in the `BUILD.bazel` file in the root directory will find a go_library rule
-named basic-gazelle_lib, and this is a target we can build.
+If we look in the `BUILD.bazel` file in the root directory will find a python_library rule
+named test_python_example, and this is a target we can build.
 
 ```bash
-$ bazelisk build //:basic-gazelle_lib
+$ bazelisk build :test_python_example
 ```
 
-This "go_library" target is named by Gazelle automatically depending on the name of your project, so
+This "python_library" target is named by Gazelle automatically depending on the name of your project, so
 the name may differ.
 
-We can also run the basic-gazelle binary target using the following command:
+Or we can build all of the targets under the random_number_generator directory:
 
 ```bash
-$ bazelisk run //:basic-gazelle roll
+$ bazelisk build //random_number_generator/...
 ```
 
-Or we can build all of the targets under the pkg directory:
-
-```bash
-$ bazelisk build //pkg/...
-```
-
-#### Note about binaries and build
-
-We wanted to include a side note about "bazel build".  You may wonder where the heck is the binary put.
-Bazel creates various folders and symlinks in the project directory. Within our example, we have:
-
-- bazel-bazel-gazelle
-- bazel-bin
-- bazel-out
-- bazel-basic-gazelle
-- bazel-testlogs
-
-Binaries from the project are placed under the bazel-bin folder.  Inside that folder, we have another folder
-with the name basic-gazelle&#95;, and that folder name is created from the name of the binary that is 
-created.  A Bazel project can contain multiple binaries, so we have to have that form of naming syntax.  Inside
-the basic-gazelle&#95; folder we have the binary basic-gazelle&#95;.
+<!-- FIXME -->
 
 ### Where Gazelle defines the dependencies
 
